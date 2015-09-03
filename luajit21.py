@@ -2664,12 +2664,17 @@ class lgcpath(lgcstat):
         self.obj_size = 0
         self.obj_annot = {}
         self.path_root = 0
+        self.ocnt = 0
+        self.ototal_sz = 0
+        self.omax = 0
+        self.omin = 0
 
     def invoke (self, args, from_tty):
         argv = gdb.string_to_argv(args)
 
         if len(argv) == 1:
             self.objsize = gdb.parse_and_eval(argv[0])
+            self.obj_ty = ""
         elif len(argv) == 2:
             self.objsize = gdb.parse_and_eval(argv[0])
             self.obj_ty = argv[1]
@@ -2713,6 +2718,11 @@ class lgcpath(lgcstat):
 
         if self.path_idx == 0:
             out("No GC object of size %d\n" % self.objsize)
+
+        if self.obj_ty:
+            out ("Statistics: %4d live %s objects: max=%d, avg = %d, min=%d, sum=%d\n" %
+                 (self.ocnt, self.obj_ty, self.omax, self.ototal_sz/max(1,
+                  self.ocnt), self.omin, self.ototal_sz))
 
     def is_visited(self, n):
         try:
@@ -2850,6 +2860,8 @@ class lgcpath(lgcstat):
         if self.path_idx == 15:
             self.path_idx = 16
             out("... more paths ...\n")
+            if self.obj_ty:
+                out("... waiting for Statistics ...\n")
             return
 
         out ("path %03d:" % self.path_idx)
@@ -2908,7 +2920,7 @@ class lgcpath(lgcstat):
         return False
 
     def dfs(self, o, g):
-        if self.path_idx == 16:
+        if self.path_idx == 16 and not self.obj_ty:
             return
 
         if self.is_visited(o) != 0:
@@ -2926,7 +2938,15 @@ class lgcpath(lgcstat):
         if sz >= self.objsize and self.is_intersted_ty(ty):
           self.print_obj_path(g)
 
-        # Step 3: Visit the GC object
+        # Step 3: Statistics
+        if self.is_intersted_ty(ty):
+            self.ocnt = self.ocnt + 1
+            self.ototal_sz += sz;
+            self.omax = max(self.omax, sz);
+            self.omin = min(self.omin, sz);
+
+
+        # Step 4: Visit the GC object
         if ty == ~LJ_TSTR():
             pass
         elif ty == ~LJ_TTAB() :
